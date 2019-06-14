@@ -15,8 +15,10 @@ func main() {
 	fset := token.NewFileSet()
 
 	var packagePath string
+	var printFile bool
 
 	flag.StringVar(&packagePath, "pkg", "", "full path to package")
+	flag.BoolVar(&printFile, "printfile", false, "whether to print location alongside package")
 	flag.Parse()
 
 	if packagePath == "" {
@@ -33,6 +35,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("Parsing %s ...", filePath)
+
 	src := string(b)
 
 	f, err := parser.ParseFile(fset, filePath, src, 0)
@@ -46,7 +50,11 @@ func main() {
 	}
 
 	for _, ref := range refs {
-		fmt.Println(ref)
+		if printFile {
+			fmt.Printf("%s:%s\n", filePath, ref)
+		} else {
+			fmt.Println(ref)
+		}
 	}
 }
 
