@@ -3,6 +3,8 @@
 Have you ever built a Go package which others depend on and need to understand
 how to best approach refactoring to limit breaking your external interface?
 
+i.e. Do you need to know which exposed parts of your package are in use?
+
 Go-refs uses Go's AST package to parse a (go) file and list any identifiers
 which are in use from a given import path.
 
