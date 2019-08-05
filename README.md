@@ -14,3 +14,15 @@ go list -json ./... \
   | xargs -n1 go-refs -pkg github.com/hashicorp/terraform/helper/schema \
   | sort | uniq -c | sort -nr
 ```
+```
+5313 TypeString
+2652 ResourceData
+2010 Resource
+1947 Schema
+ 920 Set
+ 658 TypeList
+ 597 TypeInt
+ 561 TypeBool
+ 524 TypeSet
+...
+```
