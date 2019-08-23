@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestFindPackageReferences(t *testing.T) {
+func TestFindPackageReferences_basic(t *testing.T) {
 	testContent := `package example
 
 import (
@@ -30,6 +30,42 @@ func main() {
 	}
 
 	expectedRefs := []string{"Printf"}
+	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
+		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
+	}
+}
+
+func TestFindPackageReferences_matchingVariable(t *testing.T) {
+	testContent := `package example
+
+import (
+	"fmt"
+	"os"
+)
+
+type Formatter struct {
+}
+
+func (f *Formatter) Printf() string {
+	return "hello"
+}
+
+func main() {
+	fmt := &Formatter{}
+	fmt.Printf("something")
+}
+`
+	f, err := parseFile("src.go", testContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refs, err := FindPackageReferences(f, "fmt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedRefs := []string{}
 	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
 		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
 	}
