@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestFindPackageReferences_basic(t *testing.T) {
+func TestFindPackageReferences_function(t *testing.T) {
 	testContent := `package example
 
 import (
@@ -32,6 +32,71 @@ func main() {
 	expectedRefs := []string{"Printf"}
 	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
 		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
+	}
+}
+
+func TestFindPackageReferences_ident(t *testing.T) {
+	testContent := `package example
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	fmt.Something
+}
+`
+	f, err := parseFile("src.go", testContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refs, err := FindPackageReferences(f, "fmt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedRefs := []string{"Something"}
+	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
+		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
+	}
+}
+
+func TestFindPackageReferences_funcsAndIdents(t *testing.T) {
+	testContent := `package example
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	fmt.Something
+	fmt.ExampleFunc()
+}
+`
+	f, err := parseFile("src.go", testContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refs, err := FindPackageReferences(f, "fmt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedRefs := []string{"Something", "ExampleFunc"}
+	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
+		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
+	}
+
+	if v, ok := refs[0].(*ast.Ident); !ok {
+		t.Fatalf("Expected 1st reference to be of type *ast.Ident, given %T", v)
+	}
+
+	if v, ok := refs[1].(*CallExpr); !ok {
+		t.Fatalf("Expected 2nd reference to be of type *CallExpr, given %T", v)
 	}
 }
 

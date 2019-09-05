@@ -9,6 +9,19 @@ import (
 	"strings"
 )
 
+type CallExpr struct {
+	*ast.CallExpr
+	importName string
+}
+
+func (ce *CallExpr) String() string {
+	ident, _ := getIdentFromSelector(ce.Fun.(*ast.SelectorExpr), ce.importName)
+	if ident == nil {
+		return fmt.Sprintf("%s", ce.Fun)
+	}
+	return fmt.Sprintf("%s", ident)
+}
+
 func ParseFile(filePath string) (*ast.File, error) {
 	b, err := ioutil.ReadFile(filePath)
 	if err != nil {
@@ -21,6 +34,27 @@ func ParseFile(filePath string) (*ast.File, error) {
 func parseFile(filePath, content string) (*ast.File, error) {
 	fset := token.NewFileSet()
 	return parser.ParseFile(fset, filePath, content, 0)
+}
+
+func getIdentFromSelector(selector *ast.SelectorExpr, importName string) (*ast.Ident, bool) {
+	x := selector.X
+
+	ident, ok := x.(*ast.Ident)
+	if !ok {
+		return nil, true
+	}
+
+	if ident.Name != importName {
+		return nil, true
+	}
+
+	if ident.Obj != nil {
+		// Avoid reporting references to local variables
+		// which may have the same name as package
+		return nil, true
+	}
+
+	return selector.Sel, true
 }
 
 func FindPackageReferences(f *ast.File, importPath string) ([]ast.Node, error) {
@@ -42,26 +76,24 @@ func FindPackageReferences(f *ast.File, importPath string) ([]ast.Node, error) {
 		case *ast.ImportSpec:
 			// Imports are processed separately (above)
 			return false
+		case *ast.CallExpr:
+			callExpr := node.(*ast.CallExpr)
+			fun := callExpr.Fun
+			ident, keepTraversing := getIdentFromSelector(fun.(*ast.SelectorExpr), importName)
+			if ident == nil {
+				return keepTraversing
+			}
+
+			refs = append(refs, &CallExpr{callExpr, importName})
+			return false
 		case *ast.SelectorExpr:
 			selector := node.(*ast.SelectorExpr)
-			x := selector.X
-
-			ident, ok := x.(*ast.Ident)
-			if !ok {
-				return true
+			ident, keepTraversing := getIdentFromSelector(selector, importName)
+			if ident == nil {
+				return keepTraversing
 			}
 
-			if ident.Name != importName {
-				return true
-			}
-
-			if ident.Obj != nil {
-				// Avoid reporting references to local variables
-				// which may have the same name as package
-				return true
-			}
-
-			refs = append(refs, selector.Sel)
+			refs = append(refs, ident)
 		}
 
 		return true
