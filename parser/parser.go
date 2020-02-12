@@ -63,43 +63,62 @@ func FindPackageReferences(f *ast.File, importPath string) ([]ast.Node, error) {
 		return nil, err
 	}
 
-	var refs = make([]ast.Node, 0)
+	i := &inspector{
+		importName: importName,
+		foundRefs:  make([]ast.Node, 0),
+	}
 
 	ast.Inspect(f, func(node ast.Node) bool {
-		if node == nil {
-			return false
-		}
-
-		switch node.(type) {
-		case *ast.File:
-			return true
-		case *ast.ImportSpec:
-			// Imports are processed separately (above)
-			return false
-		case *ast.CallExpr:
-			callExpr := node.(*ast.CallExpr)
-			fun := callExpr.Fun
-			ident, keepTraversing := getIdentFromSelector(fun.(*ast.SelectorExpr), importName)
-			if ident == nil {
-				return keepTraversing
-			}
-
-			refs = append(refs, &CallExpr{callExpr, importName})
-			return false
-		case *ast.SelectorExpr:
-			selector := node.(*ast.SelectorExpr)
-			ident, keepTraversing := getIdentFromSelector(selector, importName)
-			if ident == nil {
-				return keepTraversing
-			}
-
-			refs = append(refs, ident)
-		}
-
-		return true
+		return i.inspectNode(node)
 	})
 
-	return refs, nil
+	return i.foundRefs, nil
+}
+
+type inspector struct {
+	importName string
+	foundRefs  []ast.Node
+}
+
+func (i *inspector) inspectNode(node ast.Node) bool {
+	if node == nil {
+		return false
+	}
+
+	switch n := node.(type) {
+	case *ast.File:
+		return true
+	case *ast.ImportSpec:
+		// Imports are processed separately (above)
+		return false
+	case *ast.CallExpr:
+		if n.Fun == nil {
+			return true
+		}
+
+		switch expr := n.Fun.(type) {
+		case *ast.SelectorExpr:
+			ident, keepTraversing := getIdentFromSelector(expr, i.importName)
+			if ident == nil {
+				return keepTraversing
+			}
+
+			i.foundRefs = append(i.foundRefs, &CallExpr{n, i.importName})
+			return false
+		default:
+			return true
+		}
+	case *ast.SelectorExpr:
+		ident, keepTraversing := getIdentFromSelector(n, i.importName)
+		if ident == nil {
+			return keepTraversing
+		}
+
+		i.foundRefs = append(i.foundRefs, ident)
+	default:
+	}
+
+	return true
 }
 
 // This implementation does not handle case where package

@@ -7,8 +7,16 @@ import (
 	"testing"
 )
 
-func TestFindPackageReferences_function(t *testing.T) {
-	testContent := `package example
+func TestFindPackageReferences(t *testing.T) {
+	testCases := []struct {
+		name         string
+		code         string
+		pkgName      string
+		expectedRefs []string
+	}{
+		{
+			"function",
+			`package example
 
 import (
 	"fmt"
@@ -18,25 +26,13 @@ import (
 func main() {
 	fmt.Printf("something")
 }
-`
-	f, err := parseFile("src.go", testContent)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	refs, err := FindPackageReferences(f, "fmt")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expectedRefs := []string{"Printf"}
-	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
-		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
-	}
-}
-
-func TestFindPackageReferences_ident(t *testing.T) {
-	testContent := `package example
+`,
+			"fmt",
+			[]string{"Printf"},
+		},
+		{
+			"ident",
+			`package example
 
 import (
 	"fmt"
@@ -46,25 +42,13 @@ import (
 func main() {
 	fmt.Something
 }
-`
-	f, err := parseFile("src.go", testContent)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	refs, err := FindPackageReferences(f, "fmt")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expectedRefs := []string{"Something"}
-	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
-		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
-	}
-}
-
-func TestFindPackageReferences_funcsAndIdents(t *testing.T) {
-	testContent := `package example
+`,
+			"fmt",
+			[]string{"Something"},
+		},
+		{
+			"funcs and idents",
+			`package example
 
 import (
 	"fmt"
@@ -75,33 +59,13 @@ func main() {
 	fmt.Something
 	fmt.ExampleFunc()
 }
-`
-	f, err := parseFile("src.go", testContent)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	refs, err := FindPackageReferences(f, "fmt")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expectedRefs := []string{"Something", "ExampleFunc"}
-	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
-		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
-	}
-
-	if v, ok := refs[0].(*ast.Ident); !ok {
-		t.Fatalf("Expected 1st reference to be of type *ast.Ident, given %T", v)
-	}
-
-	if v, ok := refs[1].(*CallExpr); !ok {
-		t.Fatalf("Expected 2nd reference to be of type *CallExpr, given %T", v)
-	}
-}
-
-func TestFindPackageReferences_matchingVariable(t *testing.T) {
-	testContent := `package example
+`,
+			"fmt",
+			[]string{"Something", "ExampleFunc"},
+		},
+		{
+			"matching variable",
+			`package example
 
 import (
 	"fmt"
@@ -119,20 +83,107 @@ func main() {
 	fmt := &Formatter{}
 	fmt.Printf("something")
 }
-`
-	f, err := parseFile("src.go", testContent)
-	if err != nil {
-		t.Fatal(err)
+`,
+			"fmt",
+			[]string{},
+		},
+		{
+			"anonymous function",
+			`package terraform
+
+import (
+	"fmt"
+)
+
+func Run() error {
+	defer func() {
+		fmt.Println("at last")
+	}()
+	return nil
+}
+`,
+			"fmt",
+			[]string{"Println"},
+		},
+		{
+			"type declaration",
+			`package terraform
+
+import (
+	"fmt"
+)
+
+type MyFunc func(f fmt.Formatter ) error
+
+`,
+			"fmt",
+			[]string{"Formatter"},
+		},
+		{
+			"variable declaration",
+			`package terraform
+
+import (
+	"fmt"
+)
+
+var formatter fmt.Formatter
+var ptr *fmt.Ptr
+
+`,
+			"fmt",
+			[]string{"Formatter", "Ptr"},
+		},
+		{
+			"function arguments",
+			`package terraform
+
+import (
+	"fmt"
+)
+
+func run(f fmt.CustomFunc) error {
+	return f()
+}
+
+`,
+			"fmt",
+			[]string{"CustomFunc"},
+		},
+		{
+			"function results",
+			`package terraform
+
+import (
+	"fmt"
+)
+
+func run() *fmt.Error {
+	return nil
+}
+
+`,
+			"fmt",
+			[]string{"Error"},
+		},
 	}
 
-	refs, err := FindPackageReferences(f, "fmt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d-%s", i, tc.name), func(t *testing.T) {
+			f, err := parseFile("src.go", tc.code)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	expectedRefs := []string{}
-	if !reflect.DeepEqual(stringifyAstNodes(refs), expectedRefs) {
-		t.Fatalf("Expected: %q\nGiven: %q\n", expectedRefs, refs)
+			refs, err := FindPackageReferences(f, tc.pkgName)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(stringifyAstNodes(refs), tc.expectedRefs) {
+				t.Fatalf("Expected: %q\nGiven: %q\n", tc.expectedRefs, refs)
+			}
+		})
 	}
 }
 
